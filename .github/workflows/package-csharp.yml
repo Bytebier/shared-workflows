@@ -6,7 +6,7 @@ on:
       version-increment:
         description: "Version increment type"
         required: true
-        type: string # major, minor, patch
+        type: string
       project-path:
         description: "Path to the .csproj file"
         required: false
@@ -25,6 +25,9 @@ on:
 jobs:
   package:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write       # needed to push the git tag
+      packages: write       # needed to publish to GitHub Packages
     outputs:
       version: ${{ steps.bump.outputs.new_version }}
     steps:
@@ -106,6 +109,28 @@ jobs:
             --no-build \
             -p:PackageVersion=${{ steps.bump.outputs.new_version }} \
             --output ./nupkg
+
+      - name: Push to GitHub Packages
+        run: |
+          dotnet nuget add source \
+            --username ${{ github.actor }} \
+            --password ${{ secrets.GITHUB_TOKEN }} \
+            --store-password-in-clear-text \
+            --name github \
+            "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
+          dotnet nuget push ./nupkg/*.nupkg \
+            --source github \
+            --skip-duplicate
+
+      - name: Create and push git tag
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "v${{ steps.bump.outputs.new_version }}"
+          git push origin "v${{ steps.bump.outputs.new_version }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload NuGet package artifact
         uses: actions/upload-artifact@v4
