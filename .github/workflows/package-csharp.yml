@@ -1,0 +1,114 @@
+name: Package C# Project
+
+on:
+  workflow_call:
+    inputs:
+      version-increment:
+        description: "Version increment type"
+        required: true
+        type: string # major, minor, patch
+      project-path:
+        description: "Path to the .csproj file"
+        required: false
+        type: string
+        default: ""
+      dotnet-version:
+        description: ".NET SDK version"
+        required: false
+        type: string
+        default: "8.0.x"
+    outputs:
+      version:
+        description: "The new version number"
+        value: ${{ jobs.package.outputs.version }}
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.bump.outputs.new_version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+
+      - name: Find project file
+        id: find-project
+        shell: bash
+        run: |
+          if [ -n "${{ inputs.project-path }}" ]; then
+            echo "project=${{ inputs.project-path }}" >> "$GITHUB_OUTPUT"
+          else
+            PROJECT=$(find . -name '*.csproj' | head -n 1)
+            if [ -z "$PROJECT" ]; then
+              echo "::error::No .csproj file found"
+              exit 1
+            fi
+            echo "project=$PROJECT" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Get current version
+        id: current
+        shell: bash
+        run: |
+          VERSION=$(grep -oPm1 '(?<=<Version>)[^<]+' "${{ steps.find-project.outputs.project }}" || echo "0.0.0")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Current version: $VERSION"
+
+      - name: Bump version
+        id: bump
+        shell: bash
+        run: |
+          IFS='.' read -r MAJOR MINOR PATCH <<< "${{ steps.current.outputs.version }}"
+          MAJOR=${MAJOR:-0}
+          MINOR=${MINOR:-0}
+          PATCH=${PATCH:-0}
+
+          case "${{ inputs.version-increment }}" in
+            major)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            patch)
+              PATCH=$((PATCH + 1))
+              ;;
+            *)
+              echo "::error::Invalid increment type: ${{ inputs.version-increment }}. Use major, minor, or patch."
+              exit 1
+              ;;
+          esac
+
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "New version: $NEW_VERSION"
+
+      - name: Restore dependencies
+        run: dotnet restore "${{ steps.find-project.outputs.project }}"
+
+      - name: Build
+        run: dotnet build "${{ steps.find-project.outputs.project }}" --configuration Release --no-restore
+
+      - name: Pack
+        run: |
+          dotnet pack "${{ steps.find-project.outputs.project }}" \
+            --configuration Release \
+            --no-build \
+            -p:PackageVersion=${{ steps.bump.outputs.new_version }} \
+            --output ./nupkg
+
+      - name: Upload NuGet package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-package
+          path: ./nupkg/*.nupkg
