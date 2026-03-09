@@ -9,9 +9,8 @@ on:
         type: string
       project-path:
         description: "Path to the .csproj file"
-        required: false
+        required: true
         type: string
-        default: ""
       dotnet-version:
         description: ".NET SDK version"
         required: false
