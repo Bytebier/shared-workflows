@@ -112,17 +112,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Add GitHub Packages NuGet source
-        run: |
-          dotnet nuget add source \
-            --username ${{ github.actor }} \
-            --password ${{ secrets.PACKAGES_TOKEN }} \
-            --store-password-in-clear-text \
-            --name github \
-            "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
-
       - name: Restore dependencies
         run: dotnet restore "${{ steps.find-project.outputs.project }}"
+        env:
+          NUGET_AUTH_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
 
       - name: Build
         run: dotnet build "${{ steps.find-project.outputs.project }}" --configuration Release --no-restore
