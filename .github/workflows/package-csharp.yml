@@ -115,7 +115,7 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore "${{ steps.find-project.outputs.project }}"
         env:
-          NUGET_AUTH_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+          NUGET_AUTH_TOKEN: ${{ secrets.PACKAGES_TOKEN }}   # used in nuget.config
 
       - name: Build
         run: dotnet build "${{ steps.find-project.outputs.project }}" --configuration Release --no-restore
@@ -130,6 +130,7 @@ jobs:
 
       - name: Push to GitHub Packages
         run: |
+          dotnet nuget remove source github 2>/dev/null || true  # source might have already been added by nuget.config
           dotnet nuget add source \
             --username ${{ github.actor }} \
             --password ${{ secrets.GITHUB_TOKEN }} \
